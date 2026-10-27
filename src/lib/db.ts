@@ -3,10 +3,13 @@ import { mkdirSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import { createClient, type InValue, type InStatement } from "@tursodatabase/serverless/compat";
-import seedData from "./seed-data.json";
+import seedJson from "./seed-data.json";
 
 export type AppUser = { id: number; username: string };
-type SeedBill = (typeof seedData.bills)[number];
+type SeedBill = { billDate: string | null; periodFrom: string | null; periodTo: string | null; ac: number | null; other: number | null; total: number | null; avgPerDay: number | null; generation: number | null; transmission: number | null; systemLoss: number | null; ancillary: number | null; bill: number | null; pricePerKwh: number | null; acFirstFloor: number | null; acSecondFloor: number | null; comment: string | null };
+type SeedAc = { room: string; from: string; to: string; kwh: number };
+type SeedMeter = { date: string; reading: number };
+const seedData = seedJson as { bills: SeedBill[]; ac: SeedAc[]; meters: SeedMeter[] };
 const schema = `
 CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL COLLATE NOCASE UNIQUE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -72,6 +75,10 @@ export async function dashboardData(userId:number) {
 export async function insertBill(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO bills(user_id,bill_date,period_from,period_to,ac,other,total,avg_per_day,generation,transmission,system_loss,ancillary,bill,price_per_kwh,comment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[userId,r.billDate,r.periodFrom,r.periodTo,r.ac,r.other,r.total,r.avgPerDay,r.generation,r.transmission,r.systemLoss,r.ancillary,r.bill,r.pricePerKwh,r.comment]); }
 export async function insertAc(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO ac_readings(user_id,room,period_from,period_to,kwh) VALUES(?,?,?,?,?)",[userId,r.room,r.from,r.to,r.kwh]); }
 export async function insertMeter(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO meter_readings(user_id,reading_date,reading) VALUES(?,?,?)",[userId,r.date,r.reading]); }
+
+
+
+
 
 
 

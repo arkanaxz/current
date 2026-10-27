@@ -1,0 +1,29 @@
+{
+  "name": "home-electricity-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "db:migrate:turso": "node scripts/migrate-local-to-turso.mjs"
+  },
+  "dependencies": {
+    "@tursodatabase/serverless": "^1.4.1",
+    "better-sqlite3": "^13.0.3",
+    "next": "16.4.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.4.3",
+    "typescript": "^5.9.0"
+  }
+}
+

@@ -26,7 +26,7 @@ Keep the Turso auth token private. Never commit .env.local or the database token
 
 - src/app: pages, app layout, browser tab icon, and route handlers.
 - src/components: dashboard and account forms.
-- src/lib: database access, password hashing, session handling, validation, and workbook seed data.
+- src/lib: database access, password hashing, session handling, validation, and the empty starter-data template.
 - scripts/migrate-local-to-turso.mjs: guarded, one-time local SQLite to Turso data import.
 - data: local runtime SQLite database, created on first launch and excluded from Git.
 
@@ -37,5 +37,6 @@ The first account is the app owner. Passwords are salted and hashed with Node's 
 ## AI bill review
 
 Choose OpenAI, Google Gemini, or Anthropic, enter the provider's model ID and API key, and confirm the data-sharing checkbox before requesting a review. The app sends up to 24 bill records (including notes), 60 AC readings, and 60 meter readings through its server to the chosen provider. It does not store the API key. The provider may charge for API use and processes submitted data under its own terms.
+
 
 

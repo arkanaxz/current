@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { dashboardData, insertAc, insertBill, insertMeter } from "@/lib/db";
+import { dashboardData, insertAc, insertBill, insertMeter, updateBill } from "@/lib/db";
 import { dateString, optionalNumber, text } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -44,5 +44,23 @@ export async function POST(request: Request) {
   }
 }
 
-
-
+export async function PATCH(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  try {
+    const { id, type, row } = await request.json();
+    if (type !== "bill" || !Number.isSafeInteger(id) || id < 1 || !row || typeof row !== "object") return NextResponse.json({ error: "Invalid bill update." }, { status: 400 });
+    const billDate = row.billDate ? dateString(row.billDate) : null;
+    const periodFrom = row.periodFrom ? dateString(row.periodFrom) : null;
+    const periodTo = row.periodTo ? dateString(row.periodTo) : null;
+    if (!billDate || !periodFrom || !periodTo) return NextResponse.json({ error: "Enter valid bill dates." }, { status: 400 });
+    const fields = ["ac","other","total","avgPerDay","generation","transmission","systemLoss","ancillary","bill","pricePerKwh"] as const;
+    const values = Object.fromEntries(fields.map((key) => [key, optionalNumber(row[key])]));
+    if (Object.values(values).some((value) => value === undefined)) return NextResponse.json({ error: "Use numeric values for bill amounts and rates." }, { status: 400 });
+    const result = await updateBill(user.id, id, { ...values, billDate, periodFrom, periodTo, comment: text(row.comment, 500) } as Record<string, string | number | null>);
+    if (Number(result.changes ?? result.rowsAffected ?? 0) === 0) return NextResponse.json({ error: "Bill not found." }, { status: 404 });
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch {
+    return NextResponse.json({ error: "Could not update the bill." }, { status: 500 });
+  }
+}

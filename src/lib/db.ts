@@ -36,6 +36,7 @@ else {
   ready = Promise.resolve();
 }
 async function run(sql:string,args:unknown=[]):Promise<any> { await ready; return local ? local.prepare(sql).run(...((Array.isArray(args) ? args : [args]) as any[])) : remote!.execute(sql,args as never); }
+function remoteRow<T>(columns:string[],row:unknown):T { const values=row as unknown[]; return Object.fromEntries(columns.map((column,index)=>[column,values[index]])) as T; }
 async function one<T>(sql:string,args:unknown=[]):Promise<T|undefined> { await ready; if(local) return local.prepare(sql).get(...((Array.isArray(args) ? args : [args]) as any[])) as T|undefined; const result=await remote!.execute(sql,args as never); const row=result.rows[0]; return row ? remoteRow<T>(result.columns,row) : undefined; }
 async function many<T>(sql:string,args:unknown=[]):Promise<T[]> { await ready; if(local) return local.prepare(sql).all(...((Array.isArray(args) ? args : [args]) as any[])) as T[]; const result=await remote!.execute(sql,args as never); return result.rows.map(row=>remoteRow<T>(result.columns,row)); }
 export async function userCount() { return Number((await one<{count:number}>("SELECT COUNT(*) AS count FROM users"))?.count ?? 0); }

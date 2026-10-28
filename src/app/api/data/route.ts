@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     } else {
       return NextResponse.json({ error: "Unknown entry type." }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, ...dashboardData(user.id) }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ ok: true, ...await dashboardData(user.id) }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Could not save the entry." }, { status: 500 });
   }

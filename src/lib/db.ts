@@ -30,7 +30,7 @@ let local: Database.Database | undefined;
 let ready: Promise<void>;
 if (remote) ready = globals.electricityTursoReady ?? (globals.electricityTursoReady = remote.executeMultiple(schema));
 else {
-  const dir = process.env.DATA_DIR ? (isAbsolute(process.env.DATA_DIR) ? process.env.DATA_DIR : resolve(process.cwd(), process.env.DATA_DIR)) : join(process.cwd(), "data");
+  const dir = process.env.DATA_DIR ? (isAbsolute(process.env.DATA_DIR) ? process.env.DATA_DIR : resolve(/*turbopackIgnore: true*/ process.cwd(), process.env.DATA_DIR)) : join(process.cwd(), "data");
   mkdirSync(dir,{recursive:true});
   local = globals.electricityDb ?? (globals.electricityDb = (() => { const d = new Database(join(dir,"electricity.sqlite")); d.pragma("journal_mode = WAL"); d.pragma("foreign_keys = ON"); d.exec(schema); return d; })());
   ready = Promise.resolve();

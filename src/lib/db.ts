@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS bills (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id 
 CREATE INDEX IF NOT EXISTS bills_user_period_idx ON bills(user_id,bill_date);
 CREATE TABLE IF NOT EXISTS ac_readings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, room TEXT NOT NULL, period_from TEXT NOT NULL, period_to TEXT NOT NULL, kwh REAL NOT NULL, source TEXT NOT NULL DEFAULT 'LG ThinQ', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS ac_user_period_idx ON ac_readings(user_id,period_from);
+CREATE TABLE IF NOT EXISTS ac_reading_hours (ac_reading_id INTEGER PRIMARY KEY REFERENCES ac_readings(id) ON DELETE CASCADE, operation_hours REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS meter_readings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, reading_date TEXT NOT NULL, reading REAL NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS meter_user_date_idx ON meter_readings(user_id,reading_date);
 CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL DEFAULT 'member');
@@ -78,12 +79,19 @@ export async function removeSession(tokenHash:string) { await run("DELETE FROM s
 export async function dashboardData(userId:number) {
  const ownerId=await primaryAdminId()??userId;
  const bills=await many("SELECT id,bill_date AS billDate,period_from AS periodFrom,period_to AS periodTo,ac,other,total,avg_per_day AS avgPerDay,generation,transmission,system_loss AS systemLoss,ancillary,bill,price_per_kwh AS pricePerKwh,ac_first_floor AS acFirstFloor,ac_second_floor AS acSecondFloor,comment FROM bills WHERE user_id=? ORDER BY COALESCE(bill_date,period_to) DESC,id DESC",[ownerId]);
- const ac=await many('SELECT id,room,period_from AS "from",period_to AS "to",kwh,source FROM ac_readings WHERE user_id=? ORDER BY period_from DESC,id DESC',[ownerId]);
+ const ac=await many('SELECT ac_readings.id,room,period_from AS "from",period_to AS "to",kwh,source,ac_reading_hours.operation_hours AS operationHours FROM ac_readings LEFT JOIN ac_reading_hours ON ac_reading_hours.ac_reading_id=ac_readings.id WHERE ac_readings.user_id=? ORDER BY period_from DESC,ac_readings.id DESC',[ownerId]);
  const meters=await many("SELECT id,reading_date AS date,reading FROM meter_readings WHERE user_id=? ORDER BY reading_date DESC,id DESC",[ownerId]); return {bills,ac,meters};
 }
 export async function insertBill(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO bills(user_id,bill_date,period_from,period_to,ac,other,total,avg_per_day,generation,transmission,system_loss,ancillary,bill,price_per_kwh,comment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[userId,r.billDate,r.periodFrom,r.periodTo,r.ac,r.other,r.total,r.avgPerDay,r.generation,r.transmission,r.systemLoss,r.ancillary,r.bill,r.pricePerKwh,r.comment]); }
 export async function updateBill(userId:number,id:number,r:Record<string,string|number|null>) { return run("UPDATE bills SET bill_date=?,period_from=?,period_to=?,ac=?,other=?,total=?,avg_per_day=?,generation=?,transmission=?,system_loss=?,ancillary=?,bill=?,price_per_kwh=?,comment=? WHERE id=? AND user_id=?",[r.billDate,r.periodFrom,r.periodTo,r.ac,r.other,r.total,r.avgPerDay,r.generation,r.transmission,r.systemLoss,r.ancillary,r.bill,r.pricePerKwh,r.comment,id,userId]); }
-export async function insertAc(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO ac_readings(user_id,room,period_from,period_to,kwh) VALUES(?,?,?,?,?)",[userId,r.room,r.from,r.to,r.kwh]); }
+export async function insertAc(userId:number,r:Record<string,string|number|null>) {
+ const result=await run("INSERT INTO ac_readings(user_id,room,period_from,period_to,kwh) VALUES(?,?,?,?,?)",[userId,r.room,r.from,r.to,r.kwh]);
+ if(r.operationHours!=null) {
+  let id=Number(result.lastInsertRowid??result.last_insert_rowid??0);
+  if(!id) id=Number((await one<{id:number}>("SELECT id FROM ac_readings WHERE user_id=? AND room=? AND period_from=? AND period_to=? ORDER BY id DESC LIMIT 1",[userId,r.room,r.from,r.to]))?.id??0);
+  if(id)await run("INSERT INTO ac_reading_hours(ac_reading_id,operation_hours) VALUES(?,?)",[id,r.operationHours]);
+ }
+}
 export async function insertMeter(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO meter_readings(user_id,reading_date,reading) VALUES(?,?,?)",[userId,r.date,r.reading]); }
 
 

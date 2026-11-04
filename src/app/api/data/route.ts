@@ -29,8 +29,10 @@ export async function POST(request: Request) {
       if (!periodFrom || !periodTo) return NextResponse.json({ error: "Enter the billing period start and end dates." }, { status: 400 });
       await insertBill(user.id, { ...values, billDate, periodFrom, periodTo, comment: text(row.comment, 500) } as Record<string, string | number | null>);
     } else if (type === "ac") {
-      const room=text(row.room,40),from=dateString(row.from),to=dateString(row.to),kwh=optionalNumber(row.kwh),operationHours=optionalNumber(row.operationHours);
-      if(!["Home Office","Living Room","Masters Bedroom"].includes(room??"")||!from||!to||kwh==null||kwh===undefined||kwh<0||operationHours===undefined||operationHours!=null&&operationHours<0)return NextResponse.json({error:"Choose a room, enter a date range and non-negative kWh, and use a non-negative operation time."},{status:400});
+      const room=text(row.room,40),from=dateString(row.from),to=dateString(row.to),kwh=optionalNumber(row.kwh),hours=optionalNumber(row.operationHours),minutes=optionalNumber(row.operationMinutes);
+      const invalidTime=hours===undefined||minutes===undefined||hours!=null&&(!Number.isInteger(hours)||hours<0)||minutes!=null&&(!Number.isInteger(minutes)||minutes<0||minutes>59);
+      if(!["Home Office","Living Room","Masters Bedroom"].includes(room??"")||!from||!to||kwh==null||kwh===undefined||kwh<0||invalidTime)return NextResponse.json({error:"Choose a room, enter a date range and non-negative kWh, and enter whole hours plus 0–59 minutes."},{status:400});
+      const operationHours=hours==null&&minutes==null?null:(hours??0)+(minutes??0)/60;
       await insertAc(user.id,{room:room!,from,to,kwh,operationHours});
     } else if (type === "meter") {
       const date = dateString(row.date), reading = optionalNumber(row.reading);

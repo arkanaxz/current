@@ -14,7 +14,7 @@ export async function POST(request:Request) {
   if(!user)return NextResponse.json({error:"Sign in required."},{status:401});
   if(user.role!=="admin")return NextResponse.json({error:"Only the Admin can run an AC analysis."},{status:403});
   try {
-    const body=await request.json(),periodFrom=dateString(body.periodFrom),periodTo=dateString(body.periodTo),units=Array.isArray(body.units)?body.units.filter((unit:unknown)=>typeof unit==="string"&&allowedRooms.includes(unit)):[];
+    const body=await request.json(),periodFrom=dateString(body.periodFrom),periodTo=dateString(body.periodTo),units:string[]=Array.isArray(body.units)?body.units.filter((unit:unknown):unit is string=>typeof unit==="string"&&allowedRooms.includes(unit)):[];
     if(!periodFrom||!periodTo||periodFrom>periodTo)return NextResponse.json({error:"Choose a valid start and end date."},{status:400});
     if(!units.length||units.length>allowedRooms.length)return NextResponse.json({error:"Select at least one AC unit."},{status:400});
     const settings=await getAiSettings(user.id);

@@ -29,9 +29,9 @@ export async function POST(request: Request) {
       if (!periodFrom || !periodTo) return NextResponse.json({ error: "Enter the billing period start and end dates." }, { status: 400 });
       await insertBill(user.id, { ...values, billDate, periodFrom, periodTo, comment: text(row.comment, 500) } as Record<string, string | number | null>);
     } else if (type === "ac") {
-      const room = text(row.room, 80), from = dateString(row.from), to = dateString(row.to), kwh = optionalNumber(row.kwh);
-      if (!room || !from || !to || kwh == null || kwh === undefined || kwh < 0) return NextResponse.json({ error: "Enter a room, date range, and a non-negative kWh value." }, { status: 400 });
-      await insertAc(user.id, { room, from, to, kwh });
+      const room=text(row.room,40),from=dateString(row.from),to=dateString(row.to),kwh=optionalNumber(row.kwh),operationHours=optionalNumber(row.operationHours);
+      if(!["Home Office","Living Room","Masters Bedroom"].includes(room??"")||!from||!to||kwh==null||kwh===undefined||kwh<0||operationHours===undefined||operationHours!=null&&operationHours<0)return NextResponse.json({error:"Choose a room, enter a date range and non-negative kWh, and use a non-negative operation time."},{status:400});
+      await insertAc(user.id,{room:room!,from,to,kwh,operationHours});
     } else if (type === "meter") {
       const date = dateString(row.date), reading = optionalNumber(row.reading);
       if (!date || reading == null || reading === undefined || reading < 0) return NextResponse.json({ error: "Enter a date and a non-negative meter reading." }, { status: 400 });

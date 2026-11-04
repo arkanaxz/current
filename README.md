@@ -47,3 +47,6 @@ Choose OpenAI, Google Gemini, or Anthropic in Admin Settings; after entering you
 You can add a partial billing-cycle entry before the utility bill arrives. By default the cycle runs from the 16th through the next 16th. Enter usage and any known charge lines so far, then open the row and edit the same entry when more values arrive. The Admin can trigger a saved AI review or enable automatic reviews in Settings. Estimates for current-cycle usage and future charge lines are labelled as estimates and should be checked against the final utility bill.
 
 The deployed Vercel website works in current browsers on Windows and Mac. Open the same Vercel project URL on your Mac and sign in with the same account; both devices use the shared Turso database. Use the Admin-created viewer credentials for read-and-comment access.
+
+
+AC reading entries offer Home Office, Living Room, and Masters Bedroom. Each reading can include total operating hours; the AC summary shows Home Office consumption and the requested first-floor and second-floor totals.

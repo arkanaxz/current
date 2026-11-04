@@ -50,3 +50,5 @@ The deployed Vercel website works in current browsers on Windows and Mac. Open t
 
 
 AC reading entries offer Home Office, Living Room, and Masters Bedroom. Each reading can include operating time entered in separate hours and minutes; the AC summary shows Home Office consumption and the requested first-floor and second-floor totals.
+
+AC operating time can include days, hours, and minutes. The AC page also has a dedicated analysis form for selecting an inclusive date range and one or more AC rooms; results are saved in AI Reviews and shared with viewer accounts.

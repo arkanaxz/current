@@ -14,6 +14,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Only the Admin can change household readings." }, { status: 403 });
   try {
     const { type, row } = await request.json();
     if (!row || typeof row !== "object") return NextResponse.json({ error: "Entry is missing." }, { status: 400 });
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
       const fields = ["ac","other","total","avgPerDay","generation","transmission","systemLoss","ancillary","bill","pricePerKwh"] as const;
       const values = Object.fromEntries(fields.map((key) => [key, optionalNumber(row[key])]));
       if (Object.values(values).some((value) => value === undefined)) return NextResponse.json({ error: "Use numeric values for bill amounts and rates." }, { status: 400 });
-      if (!billDate || !periodFrom || !periodTo || values.total == null || values.bill == null) return NextResponse.json({ error: "Bill date, billing dates, total kWh, and bill total are required." }, { status: 400 });
+      if (!periodFrom || !periodTo) return NextResponse.json({ error: "Enter the billing period start and end dates." }, { status: 400 });
       await insertBill(user.id, { ...values, billDate, periodFrom, periodTo, comment: text(row.comment, 500) } as Record<string, string | number | null>);
     } else if (type === "ac") {
       const room = text(row.room, 80), from = dateString(row.from), to = dateString(row.to), kwh = optionalNumber(row.kwh);
@@ -47,13 +48,14 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Only the Admin can change household readings." }, { status: 403 });
   try {
     const { id, type, row } = await request.json();
     if (type !== "bill" || !Number.isSafeInteger(id) || id < 1 || !row || typeof row !== "object") return NextResponse.json({ error: "Invalid bill update." }, { status: 400 });
     const billDate = row.billDate ? dateString(row.billDate) : null;
     const periodFrom = row.periodFrom ? dateString(row.periodFrom) : null;
     const periodTo = row.periodTo ? dateString(row.periodTo) : null;
-    if (!billDate || !periodFrom || !periodTo) return NextResponse.json({ error: "Enter valid bill dates." }, { status: 400 });
+    if (row.billDate && !billDate || !periodFrom || !periodTo) return NextResponse.json({ error: "Enter valid billing period dates." }, { status: 400 });
     const fields = ["ac","other","total","avgPerDay","generation","transmission","systemLoss","ancillary","bill","pricePerKwh"] as const;
     const values = Object.fromEntries(fields.map((key) => [key, optionalNumber(row[key])]));
     if (Object.values(values).some((value) => value === undefined)) return NextResponse.json({ error: "Use numeric values for bill amounts and rates." }, { status: 400 });

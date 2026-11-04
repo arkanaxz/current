@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS ai_settings (user_id INTEGER PRIMARY KEY REFERENCES u
 CREATE TABLE IF NOT EXISTS analysis_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, provider TEXT NOT NULL, model TEXT NOT NULL, answer TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS analysis_runs_user_date_idx ON analysis_runs(user_id,created_at);
 CREATE TABLE IF NOT EXISTS analysis_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS analysis_run_details (run_id INTEGER PRIMARY KEY REFERENCES analysis_runs(id) ON DELETE CASCADE, analysis_type TEXT NOT NULL, period_from TEXT NOT NULL, period_to TEXT NOT NULL, units_json TEXT NOT NULL);
 INSERT OR IGNORE INTO user_roles(user_id,role) SELECT id,CASE WHEN id=(SELECT MIN(id) FROM users) THEN 'admin' ELSE 'member' END FROM users;
 `;
 const globals = globalThis as typeof globalThis & { electricityDb?: Database.Database; electricityTursoReady?: Promise<void> };
@@ -110,6 +111,17 @@ export async function listUsers() { return many<{id:number;username:string;role:
 export async function saveAiSettings(userId:number,v:{provider:string;model:string;cipher:string;iv:string;tag:string;autoAnalyze:boolean;consent:boolean}) { await run("INSERT INTO ai_settings(user_id,provider,model,key_cipher,key_iv,key_tag,auto_analyze,data_consent) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,key_cipher=excluded.key_cipher,key_iv=excluded.key_iv,key_tag=excluded.key_tag,auto_analyze=excluded.auto_analyze,data_consent=excluded.data_consent,updated_at=CURRENT_TIMESTAMP",[userId,v.provider,v.model,v.cipher,v.iv,v.tag,v.autoAnalyze?1:0,v.consent?1:0]); }
 export async function getAiSettings(userId:number) { return one<{provider:string;model:string;cipher:string;iv:string;tag:string;autoAnalyze:number;consent:number}>("SELECT provider,model,key_cipher AS cipher,key_iv AS iv,key_tag AS tag,auto_analyze AS autoAnalyze,data_consent AS consent FROM ai_settings WHERE user_id=?",[userId]); }
 export async function createAnalysisRun(userId:number,provider:string,model:string,answer:string) { return run("INSERT INTO analysis_runs(user_id,provider,model,answer) VALUES(?,?,?,?)",[userId,provider,model,answer]); }
-export async function analysisHistory() { const ownerId=await primaryAdminId(); if(!ownerId)return []; return many<{id:number;provider:string;model:string;answer:string;createdAt:string}>("SELECT id,provider,model,answer,created_at AS createdAt FROM analysis_runs WHERE user_id=? ORDER BY id DESC LIMIT 30",[ownerId]); }
+export async function createAcAnalysisRun(userId:number,provider:string,model:string,answer:string,periodFrom:string,periodTo:string,units:string[]) {
+ const result=await createAnalysisRun(userId,provider,model,answer);
+ let id=Number(result.lastInsertRowid??result.last_insert_rowid??0);
+ if(!id)id=Number((await one<{id:number}>("SELECT id FROM analysis_runs WHERE user_id=? ORDER BY id DESC LIMIT 1",[userId]))?.id??0);
+ if(!id)throw new Error("Could not locate saved AC review.");
+ await run("INSERT INTO analysis_run_details(run_id,analysis_type,period_from,period_to,units_json) VALUES(?,?,?,?,?)",[id,"ac",periodFrom,periodTo,JSON.stringify(units)]);
+}
+export async function analysisHistory() {
+ const ownerId=await primaryAdminId(); if(!ownerId)return [];
+ const rows=await many<{id:number;provider:string;model:string;answer:string;createdAt:string;analysisType:string|null;periodFrom:string|null;periodTo:string|null;unitsJson:string|null}>("SELECT r.id,r.provider,r.model,r.answer,r.created_at AS createdAt,d.analysis_type AS analysisType,d.period_from AS periodFrom,d.period_to AS periodTo,d.units_json AS unitsJson FROM analysis_runs r LEFT JOIN analysis_run_details d ON d.run_id=r.id WHERE r.user_id=? ORDER BY r.id DESC LIMIT 30",[ownerId]);
+ return rows.map(({unitsJson,...row})=>({...row,units:unitsJson?JSON.parse(unitsJson) as string[]:null}));
+}
 export async function analysisComments() { const ownerId=await primaryAdminId(); if(!ownerId)return []; return many<{id:number;runId:number;username:string;body:string;createdAt:string}>("SELECT c.id,c.run_id AS runId,u.username,c.body,c.created_at AS createdAt FROM analysis_comments c JOIN users u ON u.id=c.user_id JOIN analysis_runs r ON r.id=c.run_id WHERE r.user_id=? ORDER BY c.id",[ownerId]); }
 export async function addAnalysisComment(runId:number,userId:number,body:string) { const ownerId=await primaryAdminId(); if(!ownerId)throw new Error("No owner"); const result=await run("INSERT INTO analysis_comments(run_id,user_id,body) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM analysis_runs WHERE id=? AND user_id=?)",[runId,userId,body,runId,ownerId]); return Number(result.changes??result.rowsAffected??0)>0; }

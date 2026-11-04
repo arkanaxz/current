@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { getAiSettings, saveAiSettings } from "@/lib/db";
-import { decryptApiKey, encryptApiKey } from "@/lib/ai-crypto";
+import { encryptApiKey } from "@/lib/ai-crypto";
 import { text } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export async function GET() {
   if(user.role!=="admin")return NextResponse.json({error:"Admin access required."},{status:403});
   try {
     const setting=await getAiSettings(user.id);
-    return NextResponse.json({provider:setting?.provider??"openai",model:setting?.model??"",hasApiKey:Boolean(setting?.cipher),autoAnalyze:Boolean(setting?.autoAnalyze),consent:Boolean(setting?.consent)},{headers:{"Cache-Control":"private, no-store"}});
+    return NextResponse.json({provider:setting?.provider??"openai",model:setting?.model??"",hasApiKey:Boolean(setting?.cipher),autoAnalyze:setting?Boolean(setting.autoAnalyze):true,consent:Boolean(setting?.consent)},{headers:{"Cache-Control":"private, no-store"}});
   } catch { return NextResponse.json({error:"Could not load AI settings."},{status:500}); }
 }
 

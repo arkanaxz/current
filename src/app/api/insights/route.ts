@@ -80,7 +80,11 @@ Dataset: ${context}`;
     await logActivity(user,"ai.bill.analysis","analysis","success","Household bill analysis completed and saved.",auditDetails);
     return NextResponse.json({answer,provider,model,runs:await analysisHistory(),comments:await analysisComments()},{headers:{"Cache-Control":"private, no-store"}});
   } catch(error) {
-    await logActivity(user,"ai.bill.analysis","analysis","error",error instanceof Error&&error.name==="TimeoutError"?"AI analysis timed out.":"AI analysis failed before completion.",auditDetails);
-    return NextResponse.json({error:error instanceof Error&&error.name==="TimeoutError"?"The analysis timed out. Try a faster model.":"Could not complete the analysis. Check the saved provider settings."},{status:502});
+    const timedOut=error instanceof Error&&error.name==="TimeoutError";
+    await logActivity(user,"ai.bill.analysis","analysis","error",timedOut?"AI provider request timed out.":"AI analysis failed before completion.",auditDetails);
+    const message=timedOut&&auditDetails.provider==="gemini"
+      ?"Gemini did not respond within 50 seconds. The analysis was not saved; retry shortly, and check the Admin Logs if this keeps happening."
+      :timedOut?"The analysis timed out. Retry or select another provider.":"Could not complete the analysis. Check the saved provider settings.";
+    return NextResponse.json({error:message},{status:502});
   }
 }

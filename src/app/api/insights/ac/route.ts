@@ -73,7 +73,11 @@ Overlapping household bills for context: ${JSON.stringify(billingCycles)}`;
     await logActivity(user,"ai.ac.analysis","analysis","success","AC analysis completed and saved.",auditDetails);
     return NextResponse.json({answer,runs:await analysisHistory(),comments:await analysisComments()},{headers:{"Cache-Control":"private, no-store"}});
   } catch(error) {
-    await logActivity(user,"ai.ac.analysis","analysis","error",error instanceof Error&&error.name==="TimeoutError"?"AI analysis timed out.":"AI analysis failed before completion.",auditDetails);
-    return NextResponse.json({error:error instanceof Error&&error.name==="TimeoutError"?"The AC analysis timed out. Try a faster model.":"Could not complete the AC analysis. Check the saved provider settings."},{status:502});
+    const timedOut=error instanceof Error&&error.name==="TimeoutError";
+    await logActivity(user,"ai.ac.analysis","analysis","error",timedOut?"AI provider request timed out.":"AI analysis failed before completion.",auditDetails);
+    const message=timedOut&&auditDetails.provider==="gemini"
+      ?"Gemini did not respond within 50 seconds. The analysis was not saved; retry shortly, and check the Admin Logs if this keeps happening."
+      :timedOut?"The AC analysis timed out. Retry or select another provider.":"Could not complete the AC analysis. Check the saved provider settings.";
+    return NextResponse.json({error:message},{status:502});
   }
 }

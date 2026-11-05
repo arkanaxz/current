@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createFirstUser, userCount } from "@/lib/db";
+import { createFirstUser, logActivity, userCount } from "@/lib/db";
 import { hashPassword, startSession, validPassword, validUsername } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const credentials = hashPassword(body.password);
     const userId = await createFirstUser(username, credentials.hash, credentials.salt);
     await startSession(userId);
+    await logActivity({id:userId,username},"auth.setup","account","success","Initial Admin account created.",{});
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "ACCOUNT_ALREADY_EXISTS") {
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
       return NextResponse.json({ error: "That username is already in use." }, { status: 409 });
     }
+    await logActivity(null,"auth.setup","account","error","Initial Admin account setup failed.",{});
     return NextResponse.json({ error: "Could not create the account." }, { status: 500 });
   }
 }

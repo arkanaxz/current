@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { getAiSettings, saveAiSettings } from "@/lib/db";
+import { getAiSettings, logActivity, saveAiSettings } from "@/lib/db";
 import { encryptApiKey } from "@/lib/ai-crypto";
 import { text } from "@/lib/validation";
 
@@ -32,6 +32,7 @@ export async function PUT(request:Request) {
     if(consent&&!key)return NextResponse.json({error:"Enter an API key to save these settings."},{status:400});
     const encrypted=key??{cipher:"",iv:"",tag:""};
     await saveAiSettings(user.id,{provider:provider!,model,cipher:encrypted.cipher,iv:encrypted.iv,tag:encrypted.tag,autoAnalyze,consent});
+    await logActivity(user,"admin.ai_settings.save","ai_settings","success","AI provider settings updated.",{provider,model,autoAnalyze,consent,apiKeyReplaced:Boolean(apiKey)});
     return NextResponse.json({ok:true,hasApiKey:Boolean(key)});
-  } catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Could not save settings."},{status:500}); }
+  } catch(error) { await logActivity(user,"admin.ai_settings.save","ai_settings","error","AI provider settings could not be saved.",{}); return NextResponse.json({error:error instanceof Error?error.message:"Could not save settings."},{status:500}); }
 }

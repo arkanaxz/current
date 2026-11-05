@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS ai_settings (user_id INTEGER PRIMARY KEY REFERENCES u
 CREATE TABLE IF NOT EXISTS analysis_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, provider TEXT NOT NULL, model TEXT NOT NULL, answer TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS analysis_runs_user_date_idx ON analysis_runs(user_id,created_at);
 CREATE TABLE IF NOT EXISTS analysis_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, actor_username TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL, details_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS activity_logs_created_idx ON activity_logs(created_at,id);
 CREATE TABLE IF NOT EXISTS analysis_run_details (run_id INTEGER PRIMARY KEY REFERENCES analysis_runs(id) ON DELETE CASCADE, analysis_type TEXT NOT NULL, period_from TEXT NOT NULL, period_to TEXT NOT NULL, units_json TEXT NOT NULL);
 INSERT OR IGNORE INTO user_roles(user_id,role) SELECT id,CASE WHEN id=(SELECT MIN(id) FROM users) THEN 'admin' ELSE 'member' END FROM users;
 `;
@@ -125,3 +127,12 @@ export async function analysisHistory() {
 }
 export async function analysisComments() { const ownerId=await primaryAdminId(); if(!ownerId)return []; return many<{id:number;runId:number;username:string;body:string;createdAt:string}>("SELECT c.id,c.run_id AS runId,u.username,c.body,c.created_at AS createdAt FROM analysis_comments c JOIN users u ON u.id=c.user_id JOIN analysis_runs r ON r.id=c.run_id WHERE r.user_id=? ORDER BY c.id",[ownerId]); }
 export async function addAnalysisComment(runId:number,userId:number,body:string) { const ownerId=await primaryAdminId(); if(!ownerId)throw new Error("No owner"); const result=await run("INSERT INTO analysis_comments(run_id,user_id,body) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM analysis_runs WHERE id=? AND user_id=?)",[runId,userId,body,runId,ownerId]); return Number(result.changes??result.rowsAffected??0)>0; }
+
+export type ActivityLog = { id:number; actorUsername:string; action:string; target:string; status:string; message:string; details:string|null; createdAt:string };
+export async function logActivity(actor:{id?:number|null;username:string}|null,action:string,target:string,status:string,message:string,details?:Record<string,unknown>) {
+ try { await run("INSERT INTO activity_logs(actor_user_id,actor_username,action,target,status,message,details_json) VALUES(?,?,?,?,?,?,?)",[actor?.id??null,actor?.username??"system",action,target,status,message,details?JSON.stringify(details):null]); }
+ catch(error) { console.error("Activity log write failed",error instanceof Error?error.message:"unknown error"); }
+}
+export async function listActivityLogs(limit=200) {
+ return many<ActivityLog>("SELECT id,actor_username AS actorUsername,action,target,status,message,details_json AS details,created_at AS createdAt FROM activity_logs ORDER BY id DESC LIMIT ?",[Math.max(1,Math.min(500,Math.floor(limit)))]);
+}

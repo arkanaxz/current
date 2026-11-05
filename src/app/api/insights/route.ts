@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { addAnalysisComment, analysisComments, analysisHistory, createAnalysisRun, dashboardData, getAiSettings } from "@/lib/db";
+import { addAnalysisComment, analysisComments, analysisHistory, createAnalysisRun, dashboardData, getAiSettings, logActivity } from "@/lib/db";
 import { decryptApiKey } from "@/lib/ai-crypto";
 import { fetchWithGeminiRetry } from "@/lib/gemini-request";
 
@@ -20,14 +20,19 @@ export async function POST(request:Request) {
   const user=await currentUser();
   if(!user)return NextResponse.json({error:"Sign in required."},{status:401});
   if(!isAdmin(user))return NextResponse.json({error:"Only the Admin can run the household analysis."},{status:403});
+  let auditDetails:Record<string,unknown>={};
   try {
     const body=await request.json(),automatic=body.automatic===true;
+    auditDetails={automatic};
+    await logActivity(user,"ai.bill.analysis","analysis","started",automatic?"Automatic bill analysis started.":"Bill analysis started.",auditDetails);
     const settings=await getAiSettings(user.id);
-    if(!settings||!settings.cipher)return NextResponse.json({error:"Configure an AI provider and API key in Admin Settings first."},{status:400});
-    if(!settings.consent)return NextResponse.json({error:"Accept the AI data-sharing notice in Admin Settings first."},{status:400});
-    if(automatic&&!settings.autoAnalyze)return NextResponse.json({skipped:true,reason:"Automatic analysis is disabled."});
+    if(!settings||!settings.cipher){await logActivity(user,"ai.bill.analysis","analysis","error","No AI provider key is configured.",auditDetails);return NextResponse.json({error:"Configure an AI provider and API key in Admin Settings first."},{status:400});}
+    if(!settings.consent){await logActivity(user,"ai.bill.analysis","analysis","error","AI data-sharing consent is not enabled.",auditDetails);return NextResponse.json({error:"Accept the AI data-sharing notice in Admin Settings first."},{status:400});}
+    if(automatic&&!settings.autoAnalyze){await logActivity(user,"ai.bill.analysis","analysis","skipped","Automatic analysis is disabled.",auditDetails);return NextResponse.json({skipped:true,reason:"Automatic analysis is disabled."});}
     const provider=settings.provider as Provider,model=settings.model,apiKey=decryptApiKey(settings);
+    auditDetails={...auditDetails,provider,model};
     const data=await dashboardData(user.id);
+    auditDetails={...auditDetails,recordCounts:{bills:data.bills.length,acReadings:data.ac.length,meterReadings:data.meters.length}};
     const today=new Date().toISOString().slice(0,10);
     const context=JSON.stringify({asOf:today,bills:data.bills.slice(0,24),acReadings:data.ac.slice(0,60),meterReadings:data.meters.slice(0,60)});
     const prompt=`Analyze the household electricity records for Cebu, Philippines. The active utility billing cycle normally runs from the 16th through the 16th. Records may describe an in-progress billing period and can have missing values; never treat a partial-cycle total as a final month total. Identify cycle dates and elapsed days. When a partial cycle includes kWh to date, estimate the kWh budget that would keep total usage at the previous cycle's level, estimate remaining kWh allowance and per-day pace through the period end. Compare bill changes by separating kWh changes from price/charge changes where possible. Explain likely causes cautiously and distinguish evidence from hypotheses.
@@ -58,6 +63,7 @@ Dataset: ${context}`;
       const message=provider==="gemini"&&response.status===503
         ?`Gemini is temporarily overloaded or unavailable (503). Retried ${retries} times.${detail}`
         :`The ${provider} request failed (${response.status}).${detail} Check the saved model and API key, and confirm the model supports web search.`;
+      await logActivity(user,"ai.bill.analysis","analysis","error","AI provider request failed.",{...auditDetails,status:response.status,retries});
       return NextResponse.json({error:message},{status:502});
     }
     let answer="";
@@ -69,10 +75,12 @@ Dataset: ${context}`;
     if(provider==="gemini")for(const source of result.candidates?.[0]?.groundingMetadata?.groundingChunks??[])if(source.web?.uri)sources.push({title:source.web.title,url:source.web.uri});
     if(provider==="anthropic")for(const item of result.content??[])if(item.type==="web_search_tool_result")for(const source of item.content??[])if(source.url)sources.push({title:source.title,url:source.url});
     if(sources.length)answer+=`\\n\\nSources\\n${sources.map(source=>`• ${source.title??source.url}: ${source.url}`).join("\\n")}`;
-    if(!answer.trim())return NextResponse.json({error:"The provider returned no text. Try a model that supports web search."},{status:502});
+    if(!answer.trim()){await logActivity(user,"ai.bill.analysis","analysis","error","AI provider returned no text.",auditDetails);return NextResponse.json({error:"The provider returned no text. Try a model that supports web search."},{status:502});}
     await createAnalysisRun(user.id,provider,model,answer);
+    await logActivity(user,"ai.bill.analysis","analysis","success","Household bill analysis completed and saved.",auditDetails);
     return NextResponse.json({answer,provider,model,runs:await analysisHistory(),comments:await analysisComments()},{headers:{"Cache-Control":"private, no-store"}});
   } catch(error) {
+    await logActivity(user,"ai.bill.analysis","analysis","error",error instanceof Error&&error.name==="TimeoutError"?"AI analysis timed out.":"AI analysis failed before completion.",auditDetails);
     return NextResponse.json({error:error instanceof Error&&error.name==="TimeoutError"?"The analysis timed out. Try a faster model.":"Could not complete the analysis. Check the saved provider settings."},{status:502});
   }
 }

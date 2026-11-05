@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser, hashPassword, validPassword, validUsername } from "@/lib/auth";
-import { createRegularUser, listUsers } from "@/lib/db";
+import { createRegularUser, listUsers, logActivity } from "@/lib/db";
 
 export const runtime="nodejs";
 
@@ -21,6 +21,7 @@ export async function POST(request:Request) {
     if(!validPassword(body.password))return NextResponse.json({error:"Use a password between 10 and 200 characters."},{status:400});
     const credentials=hashPassword(body.password);
     await createRegularUser(username,credentials.hash,credentials.salt);
+    await logActivity(user,"admin.account.create","account","success","Viewer account created.",{username});
     return NextResponse.json({ok:true,users:await listUsers()},{status:201});
-  } catch { return NextResponse.json({error:"Could not create the account. The username may already be in use."},{status:409}); }
+  } catch { await logActivity(user,"admin.account.create","account","error","Viewer account could not be created.",{}); return NextResponse.json({error:"Could not create the account. The username may already be in use."},{status:409}); }
 }

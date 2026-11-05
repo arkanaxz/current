@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { analysisComments, analysisHistory, createAcAnalysisRun, dashboardData, getAiSettings } from "@/lib/db";
 import { decryptApiKey } from "@/lib/ai-crypto";
+import { fetchWithGeminiRetry } from "@/lib/gemini-request";
 import { dateString } from "@/lib/validation";
 
 export const runtime="nodejs";
@@ -44,9 +45,18 @@ Overlapping household bills for context: ${JSON.stringify(billingCycles)}`;
       endpoint="https://api.anthropic.com/v1/messages";headers["x-api-key"]=apiKey;headers["anthropic-version"]="2023-06-01";
       payload={model,max_tokens:3000,messages:[{role:"user",content:prompt}]};
     }
-    const response=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(payload),cache:"no-store",signal:AbortSignal.timeout(55_000)});
+    const requestInit={method:"POST",headers,body:JSON.stringify(payload),cache:"no-store" as const};
+    const {response,retries}=provider==="gemini"
+      ?await fetchWithGeminiRetry(endpoint,requestInit)
+      :{response:await fetch(endpoint,{...requestInit,signal:AbortSignal.timeout(55_000)}),retries:0};
     const result=await response.json().catch(()=>({}));
-    if(!response.ok)return NextResponse.json({error:`The ${provider} request failed (${response.status}). Check the saved model and API key.`},{status:502});
+    if(!response.ok) {
+      const detail=typeof result.error?.message==="string"?` ${result.error.message.slice(0,240)}`:"";
+      const message=provider==="gemini"&&response.status===503
+        ?`Gemini is temporarily overloaded or unavailable (503). Retried ${retries} times.${detail}`
+        :`The ${provider} request failed (${response.status}).${detail} Check the saved model and API key.`;
+      return NextResponse.json({error:message},{status:502});
+    }
     let answer="";
     if(provider==="openai")answer=(result.output??[]).flatMap((item:{content?:{type?:string;text?:string}[]})=>item.content??[]).filter((part:{type?:string})=>part.type==="output_text").map((part:{text?:string})=>part.text??"").join("\n");
     if(provider==="gemini")answer=(result.candidates?.[0]?.content?.parts??[]).map((part:{text?:string})=>part.text??"").join("\n");

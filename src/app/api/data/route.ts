@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { dashboardData, insertAc, insertBill, insertMeter, logActivity, updateBill } from "@/lib/db";
+import { dashboardData, deleteBill, insertAc, insertBill, insertMeter, logActivity, updateBill } from "@/lib/db";
 import { dateString, optionalNumber, text } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -82,5 +82,29 @@ export async function PATCH(request: Request) {
   } catch {
     await logActivity(user,"data.bill.edit","bill","error","Bill update failed.",logDetails);
     return NextResponse.json({ error: "Could not update the bill." }, { status: 500 });
+  }
+}
+
+
+export async function DELETE(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Only the Admin can change household readings." }, { status: 403 });
+  let details:Record<string,unknown>={};
+  try {
+    const { id } = await request.json();
+    if (!Number.isSafeInteger(id) || id < 1) return NextResponse.json({ error: "Invalid bill entry." }, { status: 400 });
+    details={billId:id};
+    await logActivity(user,"data.bill.delete","bill","started","Deleting a bill entry.",details);
+    const result=await deleteBill(user.id,id);
+    if(Number(result.changes ?? result.rowsAffected ?? 0)===0) {
+      await logActivity(user,"data.bill.delete","bill","error","Bill was not found.",details);
+      return NextResponse.json({error:"Bill not found."},{status:404});
+    }
+    await logActivity(user,"data.bill.delete","bill","success","Bill entry deleted.",details);
+    return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});
+  } catch {
+    await logActivity(user,"data.bill.delete","bill","error","Bill deletion failed.",details);
+    return NextResponse.json({error:"Could not delete the bill."},{status:500});
   }
 }

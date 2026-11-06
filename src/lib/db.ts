@@ -87,6 +87,7 @@ export async function dashboardData(userId:number) {
 }
 export async function insertBill(userId:number,r:Record<string,string|number|null>) { return run("INSERT INTO bills(user_id,bill_date,period_from,period_to,ac,other,total,avg_per_day,generation,transmission,system_loss,ancillary,bill,price_per_kwh,comment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[userId,r.billDate,r.periodFrom,r.periodTo,r.ac,r.other,r.total,r.avgPerDay,r.generation,r.transmission,r.systemLoss,r.ancillary,r.bill,r.pricePerKwh,r.comment]); }
 export async function updateBill(userId:number,id:number,r:Record<string,string|number|null>) { return run("UPDATE bills SET bill_date=?,period_from=?,period_to=?,ac=?,other=?,total=?,avg_per_day=?,generation=?,transmission=?,system_loss=?,ancillary=?,bill=?,price_per_kwh=?,comment=? WHERE id=? AND user_id=?",[r.billDate,r.periodFrom,r.periodTo,r.ac,r.other,r.total,r.avgPerDay,r.generation,r.transmission,r.systemLoss,r.ancillary,r.bill,r.pricePerKwh,r.comment,id,userId]); }
+export async function deleteBill(userId:number,id:number) { return run("DELETE FROM bills WHERE id=? AND user_id=?",[id,userId]); }
 export async function insertAc(userId:number,r:Record<string,string|number|null>) {
  const result=await run("INSERT INTO ac_readings(user_id,room,period_from,period_to,kwh) VALUES(?,?,?,?,?)",[userId,r.room,r.from,r.to,r.kwh]);
  if(r.operationHours!=null) {
